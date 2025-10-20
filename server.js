@@ -1,93 +1,67 @@
-const express = require('express');
-const fetch = require('node-fetch'); // v2
-const path = require('path');
-const { URL } = require('url');
+/**
+ * server.js - main entry for Seb's Unblocker V7
+ *
+ * - Serves public/index.html (your UI).
+ * - /proxy?url=... -> uses staticProxy or dynamicProxy depending on heuristics.
+ * - /resource?url=... -> returns raw asset content (used by rewritten links).
+ *
+ * Start: node server.js  (or npm run dev with nodemon)
+ */
+
+const express = require("express");
+const path = require("path");
+const { handleStaticProxy } = require("./proxy/staticProxy");
+const { handleDynamicProxy } = require("./proxy/dynamicProxy");
+const { isLikelyDynamic } = require("./proxy/utils");
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 
-// Serve static assets
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, "public")));
 
-// Serve index.html at root
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
+// Health
+app.get("/_health", (req, res) => res.send("ok"));
 
-// ------------------ PROXY ROUTE ------------------
-app.get('/proxy', async (req, res) => {
-  const targetUrl = req.query.url;
-  if (!targetUrl) return res.status(400).send('No URL specified');
-
+// Resource proxy - fetches raw resources (images, css, js, fonts, etc.)
+app.get("/resource", async (req, res) => {
+  const url = req.query.url;
+  if (!url) return res.status(400).send("Missing url");
+  // Let staticProxy or dynamicProxy use the /resource endpoint when rewriting assets.
+  // We implement a basic pass-through using node-fetch in staticProxy if preferred.
+  // For simplicity just reuse staticProxy behavior by delegating to handleStaticProxy for non-HTML resources.
   try {
-    const response = await fetch(targetUrl);
-    let body = await response.text();
-
-    // Inject <base> for relative paths
-    const urlObj = new URL(targetUrl);
-    body = body.replace(
-      /<head>/i,
-      `<head><base href="${urlObj.origin}/">`
-    );
-
-    // Rewrite relative URLs for assets and links
-    body = body.replace(
-      /(href|src|action)=['"]([^'"]+)['"]/g,
-      (match, attr, link) => {
-        try {
-          const absoluteUrl = new URL(link, targetUrl).href;
-          return `${attr}="/proxy?url=${absoluteUrl}"`;
-        } catch {
-          return match;
-        }
-      }
-    );
-
-    // Rewrite JS dynamically created links (simple approach)
-    body = body.replace(
-      /window\.location\s*=\s*['"]([^'"]+)['"]/g,
-      (match, link) => {
-        try {
-          const absoluteUrl = new URL(link, targetUrl).href;
-          return `window.location='/proxy?url=${absoluteUrl}'`;
-        } catch {
-          return match;
-        }
-      }
-    );
-
-    res.send(body);
+    await handleStaticProxy(url, res, { resourceOnly: true });
   } catch (err) {
-    res.status(500).send('Error fetching the site: ' + err.message);
+    console.error("Resource proxy error:", err);
+    res.status(500).send("Resource proxy error: " + err.message);
   }
 });
 
-// ------------------ SEARCH ROUTE ------------------
-app.get('/search', async (req, res) => {
-  const query = req.query.q;
-  if (!query) return res.status(400).send('No query provided');
+// Main proxy
+app.get("/proxy", async (req, res) => {
+  const target = req.query.url;
+  if (!target) return res.status(400).send("Missing url");
 
   try {
-    const response = await fetch(`https://duckduckgo.com/html/?q=${encodeURIComponent(query)}`);
-    const html = await response.text();
-
-    const regex = /<a rel="nofollow" class="result__a" href="([^"]+)"[^>]*>([^<]+)<\/a>.*?<a class="result__snippet">([^<]+)<\/a>/gs;
-    const results = [];
-    let match;
-    while ((match = regex.exec(html)) && results.length < 10) {
-      results.push({
-        title: match[2],
-        url: match[1],
-        description: match[3]
-      });
+    const useDynamic = isLikelyDynamic(target);
+    if (useDynamic) {
+      console.log("[PROXY] dynamic (puppeteer) ->", target);
+      await handleDynamicProxy(target, res);
+    } else {
+      console.log("[PROXY] static ->", target);
+      await handleStaticProxy(target, res);
     }
-
-    res.json(results);
   } catch (err) {
-    res.status(500).send('Search error: ' + err.message);
+    console.error("Proxy error:", err);
+    res.status(500).send("Proxy error: " + err.message);
   }
+});
+
+// catch-all to serve index.html for any other route (optional)
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
 app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
+  console.log(`Seb's Unblocker V7 running at http://localhost:${PORT}`);
 });
