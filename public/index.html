@@ -1,57 +1,170 @@
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Proxy + Tabs</title>
-  <link rel="stylesheet" href="css/style.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Seb's Unblocker V7 Proxy</title>
+<style>
+* {margin:0; padding:0; box-sizing:border-box; font-family: 'Segoe UI', sans-serif;}
+html, body {height:100%; background:#010a0a; display:flex; flex-direction:column; overflow:hidden;}
+
+/* Waves */
+.wave { position:absolute; width:200%; height:200%; border-radius:45%; opacity:0.2; animation:waveMove 15s linear infinite; }
+.wave:nth-child(1){background: linear-gradient(120deg,#00ff7f,#003300);}
+.wave:nth-child(2){animation-duration:20s; opacity:0.15; background:linear-gradient(120deg,#00ff55,#002200);}
+.wave:nth-child(3){animation-duration:25s; opacity:0.1; background:linear-gradient(120deg,#00ff99,#001100);}
+@keyframes waveMove{0%{transform:translateX(0) translateY(0) rotate(0deg);}50%{transform:translateX(-25%) translateY(10%) rotate(180deg);}100%{transform:translateX(0) translateY(0) rotate(360deg);}}
+
+/* Tab Bar */
+#tabBar {display:flex; align-items:center; background:#010a0a; border-bottom:2px solid #00ff7f; padding:5px; overflow-x:auto;}
+.tab {padding:5px 10px; margin-right:5px; border-radius:5px 5px 0 0; background:#002200; color:#00ff7f; cursor:pointer; display:flex; align-items:center; min-width:100px;}
+.tab.active {background:#00ff7f; color:#010a0a;}
+.tab button.closeTab {margin-left:5px; background:transparent; border:none; color:#00ff7f; cursor:pointer;}
+#newTabBtn {padding:5px 10px; border:none; background:#00ff7f; color:#010a0a; border-radius:5px; cursor:pointer; font-weight:bold;}
+
+/* Container */
+.container {position:relative; z-index:2; flex-grow:1; display:flex; flex-direction:column;}
+
+/* Tab Content */
+.tabContent {flex-grow:1; display:none; width:100%; height:100%;}
+.tabContent.active {display:flex; flex-direction:column;}
+
+/* Search Bar */
+.search-container {display:flex; justify-content:center; margin:20px; width:100%;}
+.search-container input[type="text"] {width:60%; padding:10px 15px; border-radius:15px 0 0 15px; border:none; font-size:1rem; backdrop-filter: blur(10px); background: rgba(0,255,127,0.05); color:#00ff7f; border:2px solid #00ff7f;}
+.search-container button {padding:10px 20px; border:none; border-radius:0 15px 15px 0; background:#00ff7f; color:#010a0a; cursor:pointer; font-weight:bold; transition:0.3s;}
+.search-container button:hover { background:#00ff99; }
+
+/* Glowing Home Text */
+.glow-text {color: #00ff7f; text-shadow:0 0 5px #00ff7f,0 0 10px #00ff7f,0 0 20px #00ff7f,0 0 40px #00ff7f,0 0 80px #00ff7f; animation: glowPulse 2s ease-in-out infinite alternate;}
+@keyframes glowPulse {0% {text-shadow:0 0 5px #00ff7f,0 0 10px #00ff7f,0 0 20px #00ff7f,0 0 40px #00ff7f,0 0 80px #00ff7f;} 100% {text-shadow:0 0 10px #00ff7f,0 0 20px #00ff7f,0 0 30px #00ff7f,0 0 60px #00ff7f,0 0 100px #00ff7f;}}
+
+/* Iframe */
+.tabContent iframe {flex-grow:1; border:none; width:100%; border-radius:0 0 15px 15px; backdrop-filter:blur(10px);}
+
+/* Responsive */
+@media(max-width:600px){.search-container input[type="text"] {width:70%;} .tab {min-width:80px;}} </style>
+
 </head>
 <body>
-  <!-- Original background -->
-  <div id="background"></div>
 
-  <!-- Tab system -->
-  <div class="tabs">
-    <!-- Copy tabs HTML from original site -->
-  </div>
+<div class="wave"></div>
+<div class="wave"></div>
+<div class="wave"></div>
 
-  <!-- Search bar -->
-  <form id="searchForm">
-    <input type="text" id="query" placeholder="Search the web" />
-    <button type="submit">Search</button>
-  </form>
+<!-- Tab Bar -->
 
-  <div id="results"></div>
+<div id="tabBar">
+  <button id="newTabBtn">+</button>
+</div>
 
-  <script src="js/main.js"></script>
-  <script>
-    const form = document.getElementById('searchForm');
-    const resultsDiv = document.getElementById('results');
+<!-- Container for Tabs -->
 
-    form.addEventListener('submit', async e => {
-      e.preventDefault();
-      const query = document.getElementById('query').value;
-      const res = await fetch(`/search?q=${encodeURIComponent(query)}`);
-      const results = await res.json();
+<div class="container" id="tabContainer"></div>
 
-      resultsDiv.innerHTML = results.map(r => `
-        <div class="result">
-          <a href="${r.url}" target="_blank">${r.title}</a>
-          <p>${r.description}</p>
-          <button onclick="openProxy('${r.url}')">Open via Proxy</button>
-        </div>
-      `).join('');
-    });
+<script>
+let tabCount = 0;
+const tabBar = document.getElementById('tabBar');
+const tabContainer = document.getElementById('tabContainer');
 
-    function openProxy(url) {
-      const dynamicSites = ['coolmathgames.com','class-77.us'];
-      const isDynamic = dynamicSites.some(d => url.includes(d));
-      if (isDynamic) {
-        window.open(url,'_blank');
-      } else {
-        window.location.href = `/proxy?url=${encodeURIComponent(url)}`;
-      }
-    }
-  </script>
+function createHomeTab() {
+  tabCount++;
+  const tabId = 'tab' + tabCount;
+
+  const tabButton = document.createElement('div');
+  tabButton.classList.add('tab', 'active');
+  tabButton.id = tabId + '-btn';
+  tabButton.innerText = "Home";
+  tabButton.addEventListener('click', ()=>activateTab(tabId));
+
+  const closeBtn = document.createElement('button');
+  closeBtn.classList.add('closeTab');
+  closeBtn.innerText = 'x';
+  closeBtn.onclick = (e)=>{e.stopPropagation(); closeTab(tabId);}
+  tabButton.appendChild(closeBtn);
+
+  tabBar.insertBefore(tabButton, document.getElementById('newTabBtn'));
+
+  const tabContent = document.createElement('div');
+  tabContent.classList.add('tabContent','active');
+  tabContent.id = tabId;
+
+  tabContent.innerHTML = `
+    <h1 class="glow-text" style="text-align:center; margin-top:20px;">Seb's Unblocker<sup>V7</sup></h1>
+    <div class="search-container">
+      <input type="text" placeholder="Enter website URL..." class="urlInput">
+      <button class="goBtn">Go</button>
+    </div>
+  `;
+  tabContainer.appendChild(tabContent);
+
+  const goBtn = tabContent.querySelector('.goBtn');
+  const urlInput = tabContent.querySelector('.urlInput');
+  goBtn.addEventListener('click', ()=>{
+    let url = urlInput.value.trim();
+    if(!url) return;
+    if(!url.startsWith('http://') && !url.startsWith('https://')) url = 'https://' + url;
+    createWebTab(url);
+  });
+  urlInput.addEventListener('keypress', e=>{if(e.key==='Enter') goBtn.click();});
+
+  activateTab(tabId);
+}
+
+function createWebTab(url) {
+  tabCount++;
+  const tabId = 'tab' + tabCount;
+
+  const tabButton = document.createElement('div');
+  tabButton.classList.add('tab', 'active');
+  tabButton.id = tabId + '-btn';
+  tabButton.innerText = url;
+  tabButton.addEventListener('click', ()=>activateTab(tabId));
+
+  const closeBtn = document.createElement('button');
+  closeBtn.classList.add('closeTab');
+  closeBtn.innerText = 'x';
+  closeBtn.onclick = (e)=>{e.stopPropagation(); closeTab(tabId);}
+  tabButton.appendChild(closeBtn);
+
+  tabBar.insertBefore(tabButton, document.getElementById('newTabBtn'));
+
+  const tabContent = document.createElement('div');
+  tabContent.classList.add('tabContent','active');
+  tabContent.id = tabId;
+
+  // Use proxy URL here
+  tabContent.innerHTML = `<iframe src="/proxy?url=${encodeURIComponent(url)}"></iframe>`;
+
+  tabContainer.appendChild(tabContent);
+  activateTab(tabId);
+}
+
+function activateTab(tabId) {
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tabContent').forEach(tc=>tc.classList.remove('active'));
+  document.getElementById(tabId + '-btn').classList.add('active');
+  document.getElementById(tabId).classList.add('active');
+}
+
+function closeTab(tabId) {
+  const btn = document.getElementById(tabId + '-btn');
+  const content = document.getElementById(tabId);
+  if(btn) btn.remove();
+  if(content) content.remove();
+
+  const tabs = document.querySelectorAll('.tab');
+  if(tabs.length>0) {
+    const lastTabId = tabs[tabs.length-1].id.replace('-btn','');
+    activateTab(lastTabId);
+  }
+}
+
+document.getElementById('newTabBtn').addEventListener('click', createHomeTab);
+
+createHomeTab();
+</script>
+
 </body>
 </html>
