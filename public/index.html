@@ -1,1 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Proxy + Tabs</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- Original background -->
+  <div id="background"></div>
 
+  <!-- Tab system -->
+  <div class="tabs">
+    <!-- Copy tabs HTML from original site -->
+  </div>
+
+  <!-- Search bar -->
+  <form id="searchForm">
+    <input type="text" id="query" placeholder="Search the web" />
+    <button type="submit">Search</button>
+  </form>
+
+  <div id="results"></div>
+
+  <script src="js/main.js"></script>
+  <script>
+    const form = document.getElementById('searchForm');
+    const resultsDiv = document.getElementById('results');
+
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      const query = document.getElementById('query').value;
+      const res = await fetch(`/search?q=${encodeURIComponent(query)}`);
+      const results = await res.json();
+
+      resultsDiv.innerHTML = results.map(r => `
+        <div class="result">
+          <a href="${r.url}" target="_blank">${r.title}</a>
+          <p>${r.description}</p>
+          <button onclick="openProxy('${r.url}')">Open via Proxy</button>
+        </div>
+      `).join('');
+    });
+
+    function openProxy(url) {
+      const dynamicSites = ['coolmathgames.com','class-77.us'];
+      const isDynamic = dynamicSites.some(d => url.includes(d));
+      if (isDynamic) {
+        window.open(url,'_blank');
+      } else {
+        window.location.href = `/proxy?url=${encodeURIComponent(url)}`;
+      }
+    }
+  </script>
+</body>
+</html>
